@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
+import { translatePage } from "../utils/fullTranslate";
 
-const LANGS: { code: string; label: string }[] = [
+const LANGS = [
   { code: "en", label: "EN" },
   { code: "hi", label: "HI" },
   { code: "gu", label: "GU" },
@@ -19,23 +20,50 @@ const LANGS: { code: string; label: string }[] = [
 export default function TranslateSwitcher() {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(() => {
-    const m = document.cookie.match(/(?:^|;)\s*googtrans=\/[a-z]{2}\/([a-z]{2})/);
-    return m ? m[1] : "en";
+    return localStorage.getItem("app_lang") || "en";
   });
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState<[number, number] | null>(null);
 
   useEffect(() => {
     document.documentElement.dir = ["ar", "he", "ur"].includes(active) ? "rtl" : "ltr";
   }, [active]);
 
-  const switchTo = (lang: string) => {
-    if (lang === active) { setOpen(false); return; }
-    // @ts-ignore
-    if (window.setGoogleTranslateCookie) {
-      // @ts-ignore
-      window.setGoogleTranslateCookie(lang);
-    } else {
-      document.cookie = "googtrans=/en/" + lang + ";path=/";
-      location.reload();
+  // if user selected a language previously, ensure page is translated once on mount
+  useEffect(() => {
+    if (active && active !== "en") {
+      // run in next tick so React has mounted UI
+      setTimeout(() => {
+        translatePage(active, (done, total) => setProgress([done, total])).catch(console.error);
+      }, 200);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount
+
+  const switchTo = async (lang: string) => {
+    setOpen(false);
+    if (lang === active) return;
+
+    setLoading(true);
+    setProgress([0, 0]);
+
+    try {
+      if (lang === "en") {
+        // clear saved preference and reload to original English state
+        localStorage.setItem("app_lang", "en");
+        location.reload();
+        return;
+      }
+
+      await translatePage(lang, (done, total) => setProgress([done, total]));
+      setActive(lang);
+      localStorage.setItem("app_lang", lang);
+    } catch (err) {
+      console.error("Translate failed:", err);
+      alert("Translation failed. Check console and backend.");
+    } finally {
+      setLoading(false);
+      setTimeout(() => setProgress(null), 800);
     }
   };
 
@@ -72,7 +100,7 @@ export default function TranslateSwitcher() {
             right: 0,
             marginTop: 8,
             padding: 8,
-            width: 120,
+            width: 140,
             maxHeight: 260,
             overflowY: "auto",
             borderRadius: 8,
@@ -103,6 +131,13 @@ export default function TranslateSwitcher() {
             </li>
           ))}
         </ul>
+      )}
+
+      {loading && (
+        <div style={{ position: "absolute", right: 0, marginTop: 40, padding: 8, background: "#fff", borderRadius: 6, boxShadow:"0 6px 18px rgba(0,0,0,0.08)" }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Translating...</div>
+          {progress && <div style={{ fontSize: 12 }}>{progress[0]} / {progress[1]}</div>}
+        </div>
       )}
     </div>
   );
