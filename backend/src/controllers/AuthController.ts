@@ -115,6 +115,8 @@ export class AuthController {
       res.status(201).json(response);
       return;
     } catch (error) {
+      console.error('❌ REGISTRATION ERROR:', error)
+      
       const response: ApiResponse = {
         success: false,
         message: 'Error during registration',
